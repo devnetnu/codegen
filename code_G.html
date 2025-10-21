@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Automatische Barcode & QR Generator</title>
+<style>
+body{font-family:sans-serif;background:#111;color:#eee;display:flex;justify-content:center;padding:20px;}
+.app{background:#222;padding:20px;border-radius:12px;max-width:900px;width:100%;display:grid;grid-template-columns:1fr 400px;gap:20px;}
+h1{margin:0 0 12px 0;font-size:20px}
+.controls{display:flex;flex-direction:column;gap:12px;}
+label{font-size:13px;color:#bcd2ff;}
+textarea,input,select{width:100%;padding:8px;border-radius:6px;border:none;background:#333;color:#fff;}
+input[type=color]{height:36px;padding:2px;}
+button{padding:10px 14px;border:none;border-radius:6px;background:#7c5cff;color:#fff;cursor:pointer;font-weight:600;}
+button.secondary{background:#333;border:1px solid #555;}
+.row{display:flex;gap:10px;}
+.row > *{flex:1;}
+.preview{background:#111;padding:16px;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+canvas,svg{background:#fff;border-radius:12px;padding:12px;max-width:100%;}
+@media (max-width: 800px) { .app { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <section class="controls">
+    <h1>Barcode & QR Code Generator</h1>
+    <div>
+      <label for="type">Type code</label>
+      <select id="type">
+        <option value="qrcode" selected>QR Code</option>
+        <option value="code128">Code128</option>
+        <option value="ean13">EAN-13</option>
+        <option value="pdf417">PDF417</option>
+        <option value="datamatrix">DataMatrix</option>
+        <option value="aztec">Aztec</option>
+      </select>
+    </div>
+    <div>
+      <label for="data">Inhoud (tekst/nummers)</label>
+      <textarea id="data" rows="2">123456789012</textarea>
+    </div>
+    <div class="row">
+      <div>
+        <label for="size">Grootte (px)</label>
+        <input type="range" id="size" min="150" max="800" value="300">
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label for="fg">Voorgrondkleur</label>
+        <input type="color" id="fg" value="#000000">
+      </div>
+      <div>
+        <label for="bg">Achtergrondkleur</label>
+        <input type="color" id="bg" value="#ffffff">
+      </div>
+    </div>
+    <div class="row">
+      <button id="generate">Genereer</button>
+      <button class="secondary" id="downloadPNG">Download PNG</button>
+      <button class="secondary" id="downloadSVG">Download SVG</button>
+      <button class="secondary" id="reset">Reset</button>
+    </div>
+  </section>
+  <section class="preview">
+    <canvas id="qrCanvas"></canvas>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bwip-js@4.7.0/dist/bwip-js.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+<script>
+const typeEl = document.getElementById('type');
+const dataEl = document.getElementById('data');
+const sizeEl = document.getElementById('size');
+const fgEl = document.getElementById('fg');
+const bgEl = document.getElementById('bg');
+const generateBtn = document.getElementById('generate');
+const downloadPNGBtn = document.getElementById('downloadPNG');
+const downloadSVGBtn = document.getElementById('downloadSVG');
+const resetBtn = document.getElementById('reset');
+const canvas = document.getElementById('qrCanvas');
+
+function generateCode() {
+  const type = typeEl.value;
+  const value = dataEl.value.trim();
+  const size = parseInt(sizeEl.value);
+  const fg = fgEl.value;
+  const bg = bgEl.value;
+
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, size, size);
+
+  if (type === 'qrcode') {
+    QRCode.toCanvas(canvas, value, {
+      width: size,
+      margin: Math.floor(size*0.05), // automatisch margin
+      color: { dark: fg, light: bg },
+      errorCorrectionLevel: 'H'       // automatisch
+    }, err => { if(err) console.error(err); });
+  } else {
+    try {
+      bwipjs.toCanvas(canvas, {
+        bcid: type,
+        text: value,
+        scale: 3,
+        height: size,
+        includetext: true,
+        textxalign: 'center',
+        backgroundcolor: bg,
+        color: fg,
+        padding: Math.floor(size*0.05) // automatisch padding
+      });
+    } catch(e) { alert('Fout bij genereren: ' + e); }
+  }
+}
+
+function downloadPNG() {
+  canvas.toBlob(blob=>{
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download='code.png';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+}
+
+function downloadSVG() {
+  const type = typeEl.value;
+  const value = dataEl.value.trim();
+  const fg = fgEl.value;
+  const bg = bgEl.value;
+  const size = parseInt(sizeEl.value);
+
+  if (type === 'qrcode') {
+    QRCode.toString(value, {
+      type:'svg',
+      width:size,
+      margin:Math.floor(size*0.05),
+      color:{dark:fg, light:bg}
+    }, (err, svg)=>{
+      if(err){alert(err);return;}
+      const blob = new Blob([svg], {type:'image/svg+xml'});
+      const url = URL.createObjectURL(blob);
+      const a=document.createElement('a'); a.href=url; a.download='qrcode.svg'; a.click(); URL.revokeObjectURL(url);
+    });
+  } else {
+    const svgNS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(svgNS,'svg');
+    svg.setAttribute('width',size);
+    svg.setAttribute('height',size);
+    const bcCanvas = document.createElement('canvas');
+    try {
+      bwipjs.toCanvas(bcCanvas,{
+        bcid:type,
+        text:value,
+        scale:3,
+        height:size,
+        includetext:true,
+        textxalign:'center',
+        backgroundcolor:bg,
+        color:fg,
+        padding:Math.floor(size*0.05)
+      });
+      const imgData = bcCanvas.toDataURL('image/png');
+      const img = document.createElementNS(svgNS,'image');
+      img.setAttributeNS('http://www.w3.org/1999/xlink','href',imgData);
+      img.setAttribute('x',0); img.setAttribute('y',0);
+      img.setAttribute('width',size); img.setAttribute('height',size);
+      svg.appendChild(img);
+      const serializer = new XMLSerializer();
+      const blob = new Blob([serializer.serializeToString(svg)],{type:'image/svg+xml'});
+      const url = URL.createObjectURL(blob);
+      const a=document.createElement('a'); a.href=url; a.download='code.svg'; a.click(); URL.revokeObjectURL(url);
+    } catch(e){alert(e);}
+  }
+}
+
+function resetAll(){
+  dataEl.value='123456789012';
+  sizeEl.value=300;
+  fgEl.value='#000000';
+  bgEl.value='#ffffff';
+  typeEl.value='qrcode';
+  generateCode();
+}
+
+generateBtn.onclick=generateCode;
+downloadPNGBtn.onclick=downloadPNG;
+downloadSVGBtn.onclick=downloadSVG;
+resetBtn.onclick=resetAll;
+
+// automatische generatie bij laden
+generateCode();
+</script>
+</body>
+</html>
